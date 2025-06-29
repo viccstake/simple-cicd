@@ -1,22 +1,24 @@
-## Repository CICD script tool
-     # Used by all endpoints running any repository code
-     # Called with different parameters to modify the behaviour
-     # The tool is meant to be mantained as development progress 
-     # The script, cicd.sh, should never be altered. Only called with parameters
-     # Developers need to:
-     #    Add relevant testing scripts in tools/util/
-     #    Call the scripts from test.sh
-     # Build code just needs to be written once per type of machine
+# CICD Script Tool
 
-# Example folder structure
+This repository contains a simple and versatile CICD script for automating integration and platform delivery.
+
+## Overview
+
+The core of this tool is the `cicd.sh` script. It's designed to be a stable tool that developers can use to build and test their code without altering the script itself. Developers contribute by adding testing and build scripts to the `tools/` directory.
+
+## Folder Structure
+
+Here is an example of the recommended folder structure for a repository using this CICD tool:
+
+```
 . (localRepo)
 ├── cicd
 │   ├── cicd.sh
 │   ├── automation_server.py
-│   ├── logs
+│   ├── logs
 │   │   └── ...
-│   ├── README.md
-│   └── tools
+│   ├── README.md
+│   └── tools
 │       ├── build.sh
 │       ├── test.sh
 │       ├── webhookaction.sh
@@ -29,40 +31,71 @@
 │   │   └── ...
 │   └── ...
 └── ...
+```
 
-# .gitignore
-     'logs/*'
-     'tools/webhookhandler.sh'
+## Getting Started
 
-# Branch model
-For any task, create a branch e.g. feature/*, bugfix/* and work on it. 
-     'git commit --amend --no-edit': to just patch the last commit. keeps it clean
-     'git push --force-with-lease': might be needed on remote
-Progress on the 'origin/main' branch happens through '--deploy' or by pull-requests.
-     Pushing is allowed on all branches. 
-The script has a '--deploy' option. This will try to merge on remote.
-If problems occur 'git merge' is done manually.
+1.  **Add your testing scripts** to the `tools/util/` directory.
+2.  **Call your testing scripts** from `tools/test.sh`.
+3.  **Write your build code** in `tools/build.sh`. This should be done once per machine type.
 
-# Script config
-Depending on how you set up 'build.sh' the script will work on different plattforms.
-     Linux/MacOS - natively
-     Windows - bash is a dependancy so 'wsl' is reccomended
-Depending on how you set up 'webhookhandler.sh' the script can be configured for automatic actions
-     Only needed for code that most machines cant run
-          Frontend: MacOS
-          Backend: Needs server access
-     Simple action ex: ('git switch "$pulledbranch" ; cicd --deploy main')
-Github webhooks / automation_server.py:
-     The server creates a tailscale tunnel
-     Github wekhooks sends to the tailscale address
-     Runs webhookhandler.sh with webhook as parameter
+### .gitignore
 
-# How to use
-This CICD script is meant to be simple and versatile for automating integration and platform delivery
- *  For developers:
-     Use without branch paramter to just build/test your current branch
-     Use without deploy to fully test your branch and its merge
-     Use with deploy to automatically cause merge on remote to happen after
-     Use the cicd/resources/* files to manually test individual parts
- *  Server/deployment setup:
-     Configure GitHub webhooks to 'automation_server.py' for automated actions. 
+You might want to add the following to your `.gitignore` file:
+
+```
+logs/*
+tools/webhookhandler.sh
+```
+
+## Branching Model
+
+*   For any task, create a feature or bugfix branch (e.g., `feature/*`, `bugfix/*`).
+*   Use `git commit --amend --no-edit` to patch the last commit and keep the history clean.
+*   Use `git push --force-with-lease` if you need to force push to a remote branch.
+*   Merges to `origin/main` happen through the `--deploy` option or via pull requests.
+*   Pushing is allowed on all branches.
+
+## Configuration
+
+### Platform Support
+
+The script can be configured to work on different platforms:
+
+*   **Linux/macOS:** Runs natively.
+*   **Windows:** Requires `bash`, so WSL is recommended.
+
+### Webhooks
+
+The `webhookhandler.sh` script can be configured for automatic actions, which is useful for code that has specific machine requirements (e.g., macOS for frontend builds, or a server with special access for backend builds).
+
+**Example Action:**
+
+```bash
+git switch "$pulledbranch" && ./cicd.sh --deploy main
+```
+
+The `automation_server.py` script creates a Tailscale tunnel to receive GitHub webhooks and then runs `webhookhandler.sh`.
+
+## Usage
+
+This CICD script is designed for both developers and server/deployment setups.
+
+### For Developers
+
+*   **Build and test your current branch:**
+    ```bash
+    ./cicd.sh
+    ```
+*   **Test your branch and its merge with `main`:**
+    ```bash
+    ./cicd.sh --test-merge main
+    ```
+*   **Deploy your branch to `main`:**
+    ```bash
+    ./cicd.sh --deploy main
+    ```
+
+### Server/Deployment Setup
+
+*   Configure GitHub webhooks to point to `automation_server.py` for automated actions.
