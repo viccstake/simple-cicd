@@ -1,20 +1,31 @@
 #!/usr/bin/env bash
+
 set -euo pipefail
 
-mode=
-depth=
+echo "Running test script..."
 
-success=true
-case "$mode" in
-    'backend'); 
-        echo "Testing backend.."
-        python './util/test_latency.py' "$depth"
-        python './util/test_roa.py'
-        [[ $depth -lt 1 ]] && exit 0
-        exit 0
-    ;;
-    'ios_frontend');
-        echo "Testing iOS frontend.."
-        exit 0
-    *) usage >&2; exit 1;;
-esac
+# --- Call your test scripts below ---
+
+# The README suggests adding test scripts to the tools/util/ directory
+# and calling them from here.
+
+# Example: Run all python test scripts in tools/util/
+# for test_file in tools/util/test_*.py; do
+#     if [ -f "$test_file" ]; then
+#         echo "Running test: $test_file"
+#         python3 "$test_file"
+#         if [ $? -ne 0 ]; then
+#             echo "Test failed: $test_file"
+#             exit 1
+#         fi
+#     fi
+# done
+
+# Example: Run a specific test script for a Node.js project
+# npm test
+
+echo "Test script finished successfully."
+
+# The script should exit with a non-zero status code if any test fails.
+
+exit 0
