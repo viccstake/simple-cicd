@@ -7,8 +7,8 @@ import os
 # --- Configuration ---
 PORT = 8000
 WEBHOOK_PATH = "/webhook"
-# This should be the path to the webhookaction.sh script relative to this file.
-ACTION_SCRIPT = "./tools/webhookaction.sh"
+# This should be the path to the webhookhandler.sh script relative to this file.
+ACTION_SCRIPT = "./tools/webhookhandler.sh"
 
 class WebhookHandler(http.server.SimpleHTTPRequestHandler):
     """

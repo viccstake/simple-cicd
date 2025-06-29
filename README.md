@@ -4,7 +4,7 @@ This repository contains a simple and versatile CICD script for automating integ
 
 ## Overview
 
-The core of this tool is the `cicd.sh` script. It's designed to be a stable tool that developers can use to build and test their code without altering the script itself. Developers contribute by adding testing and build scripts to the `tools/` directory.
+The core of this tool is the `cicd.sh` script. It's designed to be a stable tool that developers and servers can use to build and test their code without altering the script itself. Developers contribute by adding testing and build code to the `tools/` scripts and `utils/`.
 
 ## Folder Structure
 
@@ -21,7 +21,7 @@ Here is an example of the recommended folder structure for a repository using th
 │   └── tools
 │       ├── build.sh
 │       ├── test.sh
-│       ├── webhookaction.sh
+│       ├── webhookhandler.sh
 │       └── util
 │           ├── test_roa.py
 │           └── build_backend.py
@@ -53,8 +53,8 @@ tools/webhookhandler.sh
 *   For any task, create a feature or bugfix branch (e.g., `feature/*`, `bugfix/*`).
 *   Use `git commit --amend --no-edit` to patch the last commit and keep the history clean.
 *   Use `git push --force-with-lease` if you need to force push to a remote branch.
-*   Merges to `origin/main` happen through the `--deploy` option or via pull requests.
-*   Pushing is allowed on all branches.
+*   Merges to `origin` happen through the `--deploy` option.
+*   Pushing is allowed on all branches but some branches could redirect a webhook for a server to deploy.
 
 ## Configuration
 
@@ -67,15 +67,15 @@ The script can be configured to work on different platforms:
 
 ### Webhooks
 
-The `webhookhandler.sh` script can be configured for automatic actions, which is useful for code that has specific machine requirements (e.g., macOS for frontend builds, or a server with special access for backend builds).
+The `webhookhandler.sh` script takes one argument, $pulledBranch.
+The `automation_server.py` script creates a Tailscale tunnel to receive GitHub webhooks and then runs `webhookhandler.sh` with specified branch.
+Github webhooks handle all branch- and user-specific logic around this.
 
 **Example Action:**
 
 ```bash
 git switch "$pulledbranch" && ./cicd.sh --deploy main
 ```
-
-The `automation_server.py` script creates a Tailscale tunnel to receive GitHub webhooks and then runs `webhookhandler.sh`.
 
 ## Usage
 
@@ -87,9 +87,13 @@ This CICD script is designed for both developers and server/deployment setups.
     ```bash
     ./cicd.sh
     ```
+*   **Deploy your current branch:**
+    ```bash
+    ./cicd.sh --deploy
+    ```
 *   **Test your branch and its merge with `main`:**
     ```bash
-    ./cicd.sh --test-merge main
+    ./cicd.sh main
     ```
 *   **Deploy your branch to `main`:**
     ```bash
@@ -98,4 +102,5 @@ This CICD script is designed for both developers and server/deployment setups.
 
 ### Server/Deployment Setup
 
-*   Configure GitHub webhooks to point to `automation_server.py` for automated actions.
+*   Configure GitHub webhooks on specified branches to point to `automation_server.py` for automated actions.
+*   Add your desired action logic for said branch/* inside webhookhandler.

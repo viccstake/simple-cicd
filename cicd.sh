@@ -2,6 +2,10 @@
 
 set -euo pipefail
 
+if [[ -n $(git status --porcelain) ]]; then
+  exit 1 
+fi
+
 # --- Configuration ---
 # SSH_KEY_PATH="${HOME}/.ssh/id_rsa" # Example path to your private SSH key
 
@@ -15,8 +19,7 @@ A simple CICD script for building, testing, and deploying code.
 Arguments:
   TARGET_BRANCH      Optional. The branch to merge into (e.g., 'main').
                      If not provided, the script will only build and test the current branch.
-  --deploy           Optional. If provided, the script will push the merge to the remote repository.
-                     Requires TARGET_BRANCH to be set.
+  --deploy           Optional. If provided, the script will push to the remote repository on success.
   -h, --help         Show this help message.
 EOF
 }
@@ -53,17 +56,12 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-if $DEPLOY && [[ -z "$TARGET_BRANCH" ]]; then
-    echo "Error: --deploy requires a TARGET_BRANCH to be specified."
-    usage
-    exit 1
-fi
 
 # --- Initial Setup ---
 LOCAL_REPO=$(pwd)
 CURRENT_BRANCH=$(git branch --show-current)
 TMP_BASE=""
-LOG_DIR="${LOCAL_REPO}/logs"
+LOG_DIR="${LOCAL_REPO}/cicd/logs"
 LOG_FILE="${LOG_DIR}/cicd_$(date +'%Y%m%d_%H%M%S').log"
 
 # --- Logging Setup ---
@@ -121,7 +119,7 @@ echo
 
 # --- Create Temporary Workspace ---
 echo "Creating temporary workspace..."
-TMP_BASE=$(mktemp -d)
+TMP_BASE=$(cd .. ; mktemp -d)
 git clone --local "${LOCAL_REPO}" "${TMP_BASE}"
 
 cd "${TMP_BASE}"
@@ -142,7 +140,7 @@ echo "===================="
 echo " Building branch... "
 echo "===================="
 echo
-if ! bash "./tools/build.sh"; then
+if ! bash "./cicd/tools/build.sh"; then
     echo
     echo "❌ Build failed."
     exit 1
@@ -155,7 +153,7 @@ echo "================="
 echo " Running tests.. "
 echo "================="
 echo
-if ! bash "./tools/test.sh"; then
+if ! bash "./cicd/tools/test.sh"; then
     echo
     echo "❌ Tests failed."
     exit 1
@@ -163,47 +161,43 @@ fi
 echo "✅ Tests successful."
 
 # --- Merge Logic ---
-if [[ -z "$TARGET_BRANCH" ]]; then
+if [[ -n "$TARGET_BRANCH" ]]; then
+
     echo
-    echo "Job finished. No target branch specified."
-    exit 0
-fi
-
-echo
-echo "============================="
-echo " Testing merge with ${TARGET_BRANCH}... "
-echo "============================="
-echo
-
-echo "Checking out ${TARGET_BRANCH} and merging ${CURRENT_BRANCH}..."
-git checkout "$TARGET_BRANCH"
-git pull origin "$TARGET_BRANCH"
-
-if ! git merge --no-ff --no-edit "$CURRENT_BRANCH"; then
+    echo "=================================="
+    echo " Testing merge with ${TARGET_BRANCH}... "
+    echo "=================================="
     echo
-    echo "❌ Merge failed."
-    exit 1
-fi
-echo "✅ Merge successful locally."
 
-echo
-echo "Building merged code..."
-if ! bash "./tools/build.sh"; then
+    echo "Checking out ${TARGET_BRANCH} and merging ${CURRENT_BRANCH}..."
+    git checkout "$TARGET_BRANCH"
+    git pull origin "$TARGET_BRANCH"
+
+    if ! git merge --no-ff --no-edit "$CURRENT_BRANCH"; then
+        echo
+        echo "❌ Merge failed."
+        exit 1
+    fi
+    echo "✅ Merge successful locally."
+
     echo
-    echo "❌ Build failed after merge."
-    exit 1
-fi
-echo "✅ Build successful after merge."
+    echo "Building merged code..."
+    if ! bash "./cicd/tools/build.sh"; then
+        echo
+        echo "❌ Build failed after merge."
+        exit 1
+    fi
+    echo "✅ Build successful after merge."
 
-echo
-echo "Testing merged code..."
-if ! bash "./tools/test.sh"; then
     echo
-    echo "❌ Tests failed after merge."
-    exit 1
+    echo "Testing merged code..."
+    if ! bash "./cicd/tools/test.sh"; then
+        echo
+        echo "❌ Tests failed after merge."
+        exit 1
+    fi
+    echo "✅ Tests successful after merge."
 fi
-echo "✅ Tests successful after merge."
-
 # --- Deploy Logic ---
 if ! $DEPLOY; then
     echo
