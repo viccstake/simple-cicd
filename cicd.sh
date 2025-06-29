@@ -63,6 +63,14 @@ fi
 LOCAL_REPO=$(pwd)
 CURRENT_BRANCH=$(git branch --show-current)
 TMP_BASE=""
+LOG_DIR="${LOCAL_REPO}/logs"
+LOG_FILE="${LOG_DIR}/cicd_$(date +'%Y%m%d_%H%M%S').log"
+
+# --- Logging Setup ---
+# Ensure log directory exists
+mkdir -p "$LOG_DIR"
+# Redirect stdout and stderr to log file and console
+exec > >(tee -a "${LOG_FILE}") 2>&1
 
 # --- Cleanup Function ---
 cleanup() {
@@ -75,7 +83,7 @@ cleanup() {
         echo "Stopping ssh-agent..."
         eval "$(ssh-agent -k)"
     fi
-    echo "Logs can be found in the 'logs' directory if you have redirected them."
+    echo "Log file saved to: ${LOG_FILE}"
 }
 trap cleanup EXIT
 
