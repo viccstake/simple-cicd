@@ -39,22 +39,13 @@ Here is an example of the recommended folder structure for a repository using th
 2.  **Call your testing scripts** from `tools/test.sh`.
 3.  **Write your build code** in `tools/build.sh`. This should be done once per machine type.
 
-### .gitignore
-
-You might want to add the following to your `.gitignore` file:
-
-```
-logs/*
-tools/webhookhandler.sh
-```
-
 ## Branching Model
 
 *   For any task, create a feature or bugfix branch (e.g., `feature/*`, `bugfix/*`).
 *   Use `git commit --amend --no-edit` to patch the last commit and keep the history clean.
 *   Use `git push --force-with-lease` if you need to force push to a remote branch.
-*   Merges to `origin` happen through the `--deploy` option.
-*   Pushing is allowed on all branches but some branches could redirect a webhook for a server to deploy.
+*   Pushing to `origin` happens through the `--deploy` option.
+*   Pushing is allowed but branches can be configured to redirect a webhook for a server to deploy, not your machine.
 
 ## Configuration
 
@@ -71,8 +62,9 @@ The `webhookhandler.sh` script takes one argument, $pulledBranch.
 The `automation_server.py` script creates a Tailscale tunnel to receive GitHub webhooks and then runs `webhookhandler.sh` with specified branch.
 Github webhooks handle all branch- and user-specific logic around this.
 
-**Example Action:**
+**Example Webhook Action:**
 
+`./webhookhandler.sh`
 ```bash
 git switch "$pulledbranch" && ./cicd.sh --deploy main
 ```
@@ -102,5 +94,30 @@ This CICD script is designed for both developers and server/deployment setups.
 
 ### Server/Deployment Setup
 
-*   Configure GitHub webhooks on specified branches to point to `automation_server.py` for automated actions.
-*   Add your desired action logic for said branch/* inside webhookhandler.
+*   Configure GitHub webhooks on specified branches to point to `tailscale_server.py` for automated actions.
+*   Add your desired action logic for said branch/* inside `webhookhandler.sh`.
+
+### As submodule
+
+*  Support for multibranch pipelines works best when this tool is included as a Git submodule (e.g., under .cicd).
+*  This prevents files not in .gitignore from spreading across your repo. 
+*  Use different branches in `.cicd` submodule-repo for different configs.
+*  Example: Main branch: `frontend` points to branch `.cicd/ origin/frontend`, ensuring the CI/CD tooling matches the branch's needs.
+*  To track a specific branch of the submodule (instead of a fixed commit), configure the submodule branch in .gitmodules:
+        [submodule ".cicd"]
+        path = .cicd
+        url = git@github.com:yourorg/cicd-tool.git
+        branch = frontend
+*  It also allows your CI/CD tooling to evolve independently and be reused across multiple projects without duplication.
+
+### .gitignore
+Always needed in .gitignore
+    ```
+    init/*                  <- 'the user's ssh-key is stored here and `init.sh` is a one-time-use'
+    ```
+If not used as submodule you might want to add the following to your `.gitignore` file:
+    ```
+    logs/*                  <- 'depends entirely on team usage'
+    tools/webhookhandler.sh <- 'host-specific actions from webhook'
+    tailscale_server.py     <- 'unnecessary for some endpoints'
+    ```

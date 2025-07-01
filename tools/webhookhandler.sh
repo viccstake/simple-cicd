@@ -20,13 +20,12 @@ echo "Webhook triggered for branch: $PULLED_BRANCH"
 
 # --- Add your automated actions below ---
 
-# Example action from README.md:
-# This example checks out the branch and runs the CICD script to deploy it to main.
+# Example action
 
-# echo "Switching to branch '$PULLED_BRANCH'..."
-# git fetch origin
-# git checkout "$PULLED_BRANCH"
-# git pull origin "$PULLED_BRANCH"
+echo "Switching to branch '$PULLED_BRANCH'..."
+git fetch --keep --all --verbose origin
+git checkout "$PULLED_BRANCH"
+git pull origin "$PULLED_BRANCH"
 
 # echo "Running CICD deployment to main..."
 # ./cicd.sh main --deploy

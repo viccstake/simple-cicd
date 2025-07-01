@@ -2,12 +2,15 @@
 
 set -euo pipefail
 
+# Must run this script with zero uncommited changes
 if [[ -n $(git status --porcelain) ]]; then
-  exit 1 
+  git status
+  exit -1
 fi
 
 # --- Configuration ---
-# SSH_KEY_PATH="${HOME}/.ssh/id_rsa" # Example path to your private SSH key
+SSH_KEY="${HOME}/.ssh/id_rsa" # <-- if deploy: ask for or use this
+GIT_URL=$(git ls-remote --get-url)
 
 # --- Script Usage ---
 usage() {
@@ -38,10 +41,17 @@ while [[ $# -gt 0 ]]; do
             usage
             exit 0
             ;;
+        -s|--sync)
+            git add --patch
+            git status --verbose
+            git fetch --keep --all --verbose --prune origin
+            git pull -ff --stat --edit
+            git commit -a --amend --no-edit
+            git push --force-with-lease
         -*)
             echo "Unknown option: $1"
             usage
-            exit 1
+            exit -1
             ;;
         *)
             if [[ -z "$TARGET_BRANCH" ]]; then
@@ -49,7 +59,7 @@ while [[ $# -gt 0 ]]; do
             else
                 echo "Too many arguments. TARGET_BRANCH already set to '$TARGET_BRANCH'"
                 usage
-                exit 1
+                exit -1
             fi
             shift
             ;;
@@ -60,12 +70,11 @@ done
 # --- Initial Setup ---
 LOCAL_REPO=$(pwd)
 CURRENT_BRANCH=$(git branch --show-current)
-TMP_BASE=""
-LOG_DIR="${LOCAL_REPO}/cicd/logs"
-LOG_FILE="${LOG_DIR}/cicd_$(date +'%Y%m%d_%H%M%S').log"
+TMP_BASE=$(cd .. ; mktemp -d)
+LOG_DIR="${LOCAL_REPO}/.cicd/logs"
+LOG_FILE="${LOG_DIR}/.cicd_$(date +'%Y%m%d_%H%M%S').log"
 
 # --- Logging Setup ---
-# Ensure log directory exists
 mkdir -p "$LOG_DIR"
 # Redirect stdout and stderr to log file and console
 exec > >(tee -a "${LOG_FILE}") 2>&1
@@ -76,31 +85,31 @@ cleanup() {
         echo "Cleaning up temporary workspace..."
         rm -rf "$TMP_BASE"
     fi
-    # The ssh-agent is started only if SSH_KEY_PATH is set
+    # If ssh-agent got started started by script: also close by script
     if [[ -n "${SSH_AGENT_PID:-}" ]]; then
-        echo "Stopping ssh-agent..."
         eval "$(ssh-agent -k)"
     fi
     echo "Log file saved to: ${LOG_FILE}"
+    popd
 }
 trap cleanup EXIT
 
 # --- Main Script ---
 echo "Starting CI/CD job at $(date)"
-
-# --- SSH Agent Setup (if key is configured) ---
-# if [[ -n "${SSH_KEY_PATH:-}" && -f "$SSH_KEY_PATH" ]]; then
-#     echo "Starting ssh-agent and adding key..."
-#     eval "$(ssh-agent -s)" > /dev/null
-#     ssh-add "${SSH_KEY_PATH}"
-# else
-#     echo "SSH_KEY_PATH not set or key not found. Proceeding without SSH key."
-# fi
+if $deploy; then 
+    # --- SSH Agent Setup (if key is configured) ---
+    if [[ -n "${SSH_KEY:-}" && -f "$SSH_KEY" ]]; then
+        eval "$(ssh-agent -s)"
+        ssh-add "${SSH_KEY}"
+    else
+        echo "Key not set or found. Proceeding without."
+    fi
+fi
 
 echo "Ensuring remote repository is reachable..."
 if ! git ls-remote --exit-code > /dev/null 2>&1; then
     echo "Error: Remote repository not reachable."
-    exit 1
+    exit -1
 fi
 
 echo
@@ -109,54 +118,52 @@ echo " Starting CI/CD Pipeline "
 echo "============================="
 echo
 
+
+echo "Job details:"
 if [[ -n "$TARGET_BRANCH" ]]; then
-    echo "Job details: Merge ${CURRENT_BRANCH} -> ${TARGET_BRANCH}"
+    echo "  Merge '$(git show-branch --sha1-name "$CURRENT_BRANCH")' into '$(git show-branch --sha1-name "$TARGET_BRANCH")'"
 else
-    echo "Job details: Build and test ${CURRENT_BRANCH}"
+    echo "  Build and test '$(git show-branch --sha1-name "$CURRENT_BRANCH")'"
 fi
-echo "Deploy: ${DEPLOY}"
-echo
+if $deploy; then echo "  Deploy to ${GIT_URL}"; fi
 
-# --- Create Temporary Workspace ---
-echo "Creating temporary workspace..."
-TMP_BASE=$(cd .. ; mktemp -d)
-git clone --local "${LOCAL_REPO}" "${TMP_BASE}"
-
-cd "${TMP_BASE}"
+echo "Entering temporary workspace..."
+pushd "${TMP_BASE}"
 
 # --- Checkout and Update ---
 echo
-echo "================="
-echo " Checking out... "
-echo "================="
+echo "============================="
+echo " Checking out.. "
+echo "============================="
 echo
-git fetch origin
-git checkout "$CURRENT_BRANCH"
-git pull origin "$CURRENT_BRANCH"
+git clone --local "${LOCAL_REPO}" "${TMP_BASE}" || exit 11
+git fetch origin --prune || exit 12
+git checkout "$CURRENT_BRANCH" || exit 13
+git pull origin "$CURRENT_BRANCH"  || exit 14
 
 # --- Build ---
 echo
-echo "===================="
-echo " Building branch... "
-echo "===================="
+echo "============================="
+echo " Building branch.. "
+echo "============================="
 echo
-if ! bash "./cicd/tools/build.sh"; then
+if ! "./.cicd/tools/build.sh"; then
     echo
     echo "❌ Build failed."
-    exit 1
+    exit 2
 fi
 echo "✅ Build successful."
 
 # --- Test ---
 echo
-echo "================="
+echo "============================="
 echo " Running tests.. "
-echo "================="
+echo "============================="
 echo
-if ! bash "./cicd/tools/test.sh"; then
+if ! "./.cicd/tools/test.sh"; then
     echo
     echo "❌ Tests failed."
-    exit 1
+    exit 3
 fi
 echo "✅ Tests successful."
 
@@ -164,37 +171,37 @@ echo "✅ Tests successful."
 if [[ -n "$TARGET_BRANCH" ]]; then
 
     echo
-    echo "=================================="
-    echo " Testing merge with ${TARGET_BRANCH}... "
-    echo "=================================="
+    echo "============================="
+    echo " Merge with ${TARGET_BRANCH}.. "
+    echo "============================="
     echo
 
-    echo "Checking out ${TARGET_BRANCH} and merging ${CURRENT_BRANCH}..."
-    git checkout "$TARGET_BRANCH"
-    git pull origin "$TARGET_BRANCH"
+    echo "Switching to ${TARGET_BRANCH} and merging ${CURRENT_BRANCH}..."
+    git checkout "${TARGET_BRANCH}" &&
+    git pull origin "$TARGET_BRANCH" || exit 41
 
     if ! git merge --no-ff --no-edit "$CURRENT_BRANCH"; then
         echo
         echo "❌ Merge failed."
-        exit 1
+        exit 42
     fi
     echo "✅ Merge successful locally."
 
     echo
     echo "Building merged code..."
-    if ! bash "./cicd/tools/build.sh"; then
+    if ! "./.cicd/tools/build.sh"; then
         echo
         echo "❌ Build failed after merge."
-        exit 1
+        exit 43
     fi
     echo "✅ Build successful after merge."
 
     echo
     echo "Testing merged code..."
-    if ! bash "./cicd/tools/test.sh"; then
+    if ! "./.cicd/tools/test.sh"; then
         echo
         echo "❌ Tests failed after merge."
-        exit 1
+        exit 44
     fi
     echo "✅ Tests successful after merge."
 fi
@@ -206,16 +213,20 @@ if ! $DEPLOY; then
 fi
 
 echo
-echo "============="
+echo "============================="
 echo " Deploying.. "
-echo "============="
+echo "============================="
 echo
+
+if [[ -n $TARGET_BRANCH ]]; then
+    # Send pull request
+fi
 
 echo "Pushing merge to remote origin/${TARGET_BRANCH}..."
 if ! git push origin "$TARGET_BRANCH"; then
     echo
     echo "❌ Deployment failed: Could not push to remote."
-    exit 1
+    exit 51
 fi
 
 echo "✅ Deployment successful!"
